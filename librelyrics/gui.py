@@ -135,26 +135,29 @@ class LibreLyricsGUI(tk.Tk):
         btn_browse = ttk.Button(path_frame, text="Browse", command=self._on_browse_clicked)
         btn_browse.pack(side=tk.RIGHT)
 
+        # Other General Settings Checkboxes
+        self.create_folder_var = tk.BooleanVar(value=self.config_manager.get('create_folder', True))
+        chk_create_folder = ttk.Checkbutton(gen_lf, text="Create folders for albums/playlists", variable=self.create_folder_var)
+        chk_create_folder.pack(anchor=tk.W, padx=5, pady=2)
+
+        self.synced_lyrics_var = tk.BooleanVar(value=self.config_manager.get('synced_lyrics', True))
+        chk_synced_lyrics = ttk.Checkbutton(gen_lf, text="Prefer synced lyrics when available", variable=self.synced_lyrics_var)
+        chk_synced_lyrics.pack(anchor=tk.W, padx=5, pady=2)
+
+        self.enhanced_lrc_var = tk.BooleanVar(value=self.config_manager.get('enhanced_lrc', True))
+        chk_enhanced_lrc = ttk.Checkbutton(gen_lf, text="Use Enhanced LRC format for word-level timing", variable=self.enhanced_lrc_var)
+        chk_enhanced_lrc.pack(anchor=tk.W, padx=5, pady=2)
+
+        self.force_download_var = tk.BooleanVar(value=self.config_manager.get('force_download', False))
+        chk_force_download = ttk.Checkbutton(gen_lf, text="Overwrite existing lyrics files", variable=self.force_download_var)
+        chk_force_download.pack(anchor=tk.W, padx=5, pady=2)
+
         # Frame for dynamic plugin settings
         self.plugin_settings_frame = ttk.Frame(self.settings_container)
         self.plugin_settings_frame.pack(fill=tk.BOTH, expand=True)
 
         self.plugin_config_vars = {} # dict mapping plugin_name -> {key -> StringVar/BooleanVar}
         self._refresh_plugin_settings()
-
-        # Spotify Settings Section
-        spotify_lf = ttk.LabelFrame(self.settings_container, text="Spotify Settings")
-        spotify_lf.pack(fill=tk.X, expand=True, padx=5, pady=5)
-
-        sp_dc_frame = ttk.Frame(spotify_lf)
-        sp_dc_frame.pack(fill=tk.X, pady=2, padx=5)
-
-        lbl_sp_dc = ttk.Label(sp_dc_frame, text="sp_dc cookie:")
-        lbl_sp_dc.pack(side=tk.LEFT, anchor=tk.W)
-
-        self.sp_dc_var = tk.StringVar(value=self.config_manager.raw.get('plugins', {}).get('Spotify', {}).get('sp_dc', ''))
-        self.sp_dc_entry = ttk.Entry(sp_dc_frame, textvariable=self.sp_dc_var)
-        self.sp_dc_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
 
         # Save Button at the bottom
         btn_save = ttk.Button(self.settings_container, text="Save Settings", command=self._on_save_settings_clicked)
@@ -216,6 +219,10 @@ class LibreLyricsGUI(tk.Tk):
     def _on_save_settings_clicked(self):
         # Save general settings
         self.config_manager.set('download_path', self.path_var.get())
+        self.config_manager.set('create_folder', self.create_folder_var.get())
+        self.config_manager.set('synced_lyrics', self.synced_lyrics_var.get())
+        self.config_manager.set('enhanced_lrc', self.enhanced_lrc_var.get())
+        self.config_manager.set('force_download', self.force_download_var.get())
 
         # Save plugin settings
         config = self.config_manager.raw
@@ -224,13 +231,6 @@ class LibreLyricsGUI(tk.Tk):
                 config['plugins'][plugin_name] = {}
             for key, var in keys_dict.items():
                 config['plugins'][plugin_name][key] = var.get()
-
-        # Save explicit Spotify settings
-        if 'plugins' not in config:
-            config['plugins'] = {}
-        if 'Spotify' not in config['plugins']:
-            config['plugins']['Spotify'] = {}
-        config['plugins']['Spotify']['sp_dc'] = self.sp_dc_var.get()
 
         self.config_manager.save()
         messagebox.showinfo("Settings Saved", "Configuration saved successfully!")
