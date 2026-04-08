@@ -8,6 +8,7 @@ from tkinter import ttk, filedialog, messagebox
 
 from librelyrics.config import ConfigManager
 from librelyrics.core import LibreLyrics, download_lyrics
+from librelyrics.registry import load_all_plugins
 from librelyrics.plugin_manager import install_plugin, remove_plugin, list_plugins
 from librelyrics.logging_config import setup_logging
 
@@ -101,11 +102,31 @@ class LibreLyricsGUI(tk.Tk):
         frame = ttk.Frame(self.tab_settings)
         frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        lbl = ttk.Label(frame, text="Download Folder:")
-        lbl.pack(anchor=tk.W)
+        # Use a canvas and scrollbar to allow scrolling if there are many settings
+        canvas = tk.Canvas(frame)
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=canvas.yview)
 
-        path_frame = ttk.Frame(frame)
-        path_frame.pack(fill=tk.X, pady=5)
+        self.settings_container = ttk.Frame(canvas)
+        self.settings_container.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=self.settings_container, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # General Settings Section
+        gen_lf = ttk.LabelFrame(self.settings_container, text="General Settings")
+        gen_lf.pack(fill=tk.X, expand=True, padx=5, pady=5)
+
+        lbl = ttk.Label(gen_lf, text="Download Folder:")
+        lbl.pack(anchor=tk.W, padx=5, pady=2)
+
+        path_frame = ttk.Frame(gen_lf)
+        path_frame.pack(fill=tk.X, pady=2, padx=5)
 
         self.path_var = tk.StringVar(value=self.config_manager.get('download_path', 'downloads'))
         self.path_entry = ttk.Entry(path_frame, textvariable=self.path_var, state='readonly')
@@ -114,14 +135,84 @@ class LibreLyricsGUI(tk.Tk):
         btn_browse = ttk.Button(path_frame, text="Browse", command=self._on_browse_clicked)
         btn_browse.pack(side=tk.RIGHT)
 
+        # Frame for dynamic plugin settings
+        self.plugin_settings_frame = ttk.Frame(self.settings_container)
+        self.plugin_settings_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.plugin_config_vars = {} # dict mapping plugin_name -> {key -> StringVar/BooleanVar}
+        self._refresh_plugin_settings()
+
+        # Save Button at the bottom
+        btn_save = ttk.Button(self.settings_container, text="Save Settings", command=self._on_save_settings_clicked)
+        btn_save.pack(pady=10)
+
+    def _refresh_plugin_settings(self):
+        # Clear existing plugin settings UI
+        for widget in self.plugin_settings_frame.winfo_children():
+            widget.destroy()
+
+        self.plugin_config_vars.clear()
+
+        config = self.config_manager.raw
+        plugins = load_all_plugins(config)
+
+        if 'plugins' not in config:
+            config['plugins'] = {}
+
+        for plugin_cls in plugins:
+            meta = plugin_cls.META
+            if not meta.config_schema:
+                continue
+
+            plugin_name = meta.name.lower()
+            if plugin_name not in config['plugins']:
+                config['plugins'][plugin_name] = plugin_cls.default_config()
+
+            plugin_lf = ttk.LabelFrame(self.plugin_settings_frame, text=f"{meta.name} Plugin Settings")
+            plugin_lf.pack(fill=tk.X, expand=True, padx=5, pady=5)
+
+            self.plugin_config_vars[plugin_name] = {}
+
+            for key, description in meta.config_schema.items():
+                row_frame = ttk.Frame(plugin_lf)
+                row_frame.pack(fill=tk.X, pady=2, padx=5)
+
+                lbl = ttk.Label(row_frame, text=f"{description}:", width=30)
+                lbl.pack(side=tk.LEFT, anchor=tk.W)
+
+                current_value = config['plugins'][plugin_name].get(key, '')
+
+                if isinstance(current_value, bool):
+                    var = tk.BooleanVar(value=current_value)
+                    chk = ttk.Checkbutton(row_frame, variable=var)
+                    chk.pack(side=tk.LEFT, fill=tk.X, expand=True)
+                    self.plugin_config_vars[plugin_name][key] = var
+                else:
+                    var = tk.StringVar(value=str(current_value))
+                    entry = ttk.Entry(row_frame, textvariable=var)
+                    entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+                    self.plugin_config_vars[plugin_name][key] = var
+
     def _on_browse_clicked(self):
         current_path = self.path_var.get()
         new_path = filedialog.askdirectory(initialdir=current_path, title="Select Download Folder")
         if new_path:
             self.path_var.set(new_path)
-            self.config_manager.set('download_path', new_path)
-            self.config_manager.save()
-            messagebox.showinfo("Settings Saved", f"Download path set to:\n{new_path}")
+
+    def _on_save_settings_clicked(self):
+        # Save general settings
+        self.config_manager.set('download_path', self.path_var.get())
+
+        # Save plugin settings
+        config = self.config_manager.raw
+        for plugin_name, keys_dict in self.plugin_config_vars.items():
+            if plugin_name not in config['plugins']:
+                config['plugins'][plugin_name] = {}
+            for key, var in keys_dict.items():
+                config['plugins'][plugin_name][key] = var.get()
+
+        self.config_manager.save()
+        messagebox.showinfo("Settings Saved", "Configuration saved successfully!")
 
     def _setup_plugins_tab(self):
         frame = ttk.Frame(self.tab_plugins)
@@ -177,6 +268,7 @@ class LibreLyricsGUI(tk.Tk):
             if success:
                 self.after(0, messagebox.showinfo, "Success", f"Plugin '{package}' installed successfully.")
                 self.after(0, self._refresh_plugin_list)
+                self.after(0, self._refresh_plugin_settings)
                 self.after(0, lambda: self.plugin_entry.delete(0, tk.END))
             else:
                 self.after(0, messagebox.showerror, "Error", f"Failed to install plugin '{package}'.")
@@ -205,6 +297,7 @@ class LibreLyricsGUI(tk.Tk):
             if success:
                 self.after(0, messagebox.showinfo, "Success", f"Plugin '{package}' removed successfully.")
                 self.after(0, self._refresh_plugin_list)
+                self.after(0, self._refresh_plugin_settings)
             else:
                 self.after(0, messagebox.showerror, "Error", f"Failed to remove plugin '{package}'.")
 
