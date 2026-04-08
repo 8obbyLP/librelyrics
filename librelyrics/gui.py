@@ -142,6 +142,20 @@ class LibreLyricsGUI(tk.Tk):
         self.plugin_config_vars = {} # dict mapping plugin_name -> {key -> StringVar/BooleanVar}
         self._refresh_plugin_settings()
 
+        # Spotify Settings Section
+        spotify_lf = ttk.LabelFrame(self.settings_container, text="Spotify Settings")
+        spotify_lf.pack(fill=tk.X, expand=True, padx=5, pady=5)
+
+        sp_dc_frame = ttk.Frame(spotify_lf)
+        sp_dc_frame.pack(fill=tk.X, pady=2, padx=5)
+
+        lbl_sp_dc = ttk.Label(sp_dc_frame, text="sp_dc cookie:")
+        lbl_sp_dc.pack(side=tk.LEFT, anchor=tk.W)
+
+        self.sp_dc_var = tk.StringVar(value=self.config_manager.raw.get('plugins', {}).get('Spotify', {}).get('sp_dc', ''))
+        self.sp_dc_entry = ttk.Entry(sp_dc_frame, textvariable=self.sp_dc_var)
+        self.sp_dc_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
+
         # Save Button at the bottom
         btn_save = ttk.Button(self.settings_container, text="Save Settings", command=self._on_save_settings_clicked)
         btn_save.pack(pady=10)
@@ -210,6 +224,13 @@ class LibreLyricsGUI(tk.Tk):
                 config['plugins'][plugin_name] = {}
             for key, var in keys_dict.items():
                 config['plugins'][plugin_name][key] = var.get()
+
+        # Save explicit Spotify settings
+        if 'plugins' not in config:
+            config['plugins'] = {}
+        if 'Spotify' not in config['plugins']:
+            config['plugins']['Spotify'] = {}
+        config['plugins']['Spotify']['sp_dc'] = self.sp_dc_var.get()
 
         self.config_manager.save()
         messagebox.showinfo("Settings Saved", "Configuration saved successfully!")
