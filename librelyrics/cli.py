@@ -794,7 +794,20 @@ def handle_local_files(librelyrics, path: str, *, verbose: bool = False) -> int:
 
 # ── Entry point ─────────────────────────────────────────────────
 # Known subcommands that should NOT be treated as URLs
-_SUBCOMMANDS = {"config", "plugin", "fetch", "--help", "-h"}
+# ── GUI command ──────────────────────────────────────────────────
+@app.command("gui")
+def gui_command() -> None:
+    """Launch the graphical user interface."""
+    try:
+        from librelyrics.gui import main as gui_main
+        gui_main()
+    except ImportError as e:
+        print_error(f"Failed to start GUI: {e}")
+        raise typer.Exit(code=1)
+
+# ── Entry point ─────────────────────────────────────────────────
+# Known subcommands that should NOT be treated as URLs
+_SUBCOMMANDS = {"config", "plugin", "fetch", "gui", "--help", "-h"}
 
 
 def main() -> None:
